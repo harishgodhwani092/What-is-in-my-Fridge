@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
+app.use(cors()); // In production, you can restrict this: app.use(cors({ origin: 'https://your-frontend-url.com' }));
 app.use(express.json());
 
 // Validate API key on startup

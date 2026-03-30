@@ -6,7 +6,7 @@ import LoadingSpinner from './components/LoadingSpinner';
 import Footer from './components/Footer';
 import './App.css';
 
-const API_URL = import.meta.env.VITE_API_URL || '';
+const API_URL = import.meta.env.VITE_API_URL || ''; // Render will inject this during build
 
 function App() {
   const [recipe, setRecipe] = useState(null);
