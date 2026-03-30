@@ -14,14 +14,12 @@ app.use(express.json());
 
 // Validate API key on startup
 if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'your_api_key_here') {
-  console.warn('\n⚠️  GEMINI_API_KEY is missing or dummy!');
-  console.warn('   The app will run in MOCK mode for now.');
-  console.warn('   Add your key to server/.env to enable the REAL magic! ✨\n');
+  console.error('\n❌ GEMINI_API_KEY is missing or invalid!');
+  console.error('   Please add your real key to server/.env to start the app.\n');
+  process.exit(1);
 }
 
-const genAI = process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_api_key_here'
-  ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-  : null;
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Recipe generation endpoint
 app.post('/api/generate-recipe', async (req, res) => {
@@ -52,43 +50,13 @@ app.post('/api/generate-recipe', async (req, res) => {
       });
     }
 
-    const isMock = !process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'your_api_key_here';
-
-    if (isMock) {
-      console.log('📝 Using MOCK recipe generator (No valid API key found)');
-      // Simulate quick AI thinking
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      const mockRecipe = {
-        name: `Supreme ${cleanIngredients[0]} Fusion`,
-        time: "5 mins",
-        difficulty: "Easy",
-        servings: "1 serving",
-        description: `Experience the unexpected delight of ${cleanIngredients.join(' and ')} blended into a quick masterpiece.`,
-        ingredients: [
-          ...cleanIngredients.map(i => `1 cup ${i}`),
-          "Pinch of salt",
-          "Drizzle of olive oil"
-        ],
-        steps: [
-          `Prep your ${cleanIngredients.join(', ')} nicely.`,
-          "Heat a pan over medium heat with a splash of oil.",
-          `Sauté everything together for exactly 3 minutes.`,
-          "Season with salt and pepper to taste.",
-          "Serve while hot and enjoy!"
-        ],
-        tip: "Add a squeeze of lemon for extra brightness!"
-      };
-      return res.json({ recipe: mockRecipe });
-    }
-
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `You are a creative home chef. A user has these ingredients: ${cleanIngredients.join(', ')}.
 
 Create a quick, delicious recipe that can be made in about 5 minutes using MAINLY these ingredients. You may include very common pantry staples (salt, pepper, oil, butter, garlic) if needed, but the recipe should primarily feature the given ingredients.
 
-Respond ONLY with valid JSON in this exact format (no markdown, no code fences):
+Respond ONLY with valid JSON in this exact format:
 {
   "name": "Creative Recipe Name",
   "time": "5 mins",
@@ -117,36 +85,28 @@ Rules:
     const response = result.response;
     const text = response.text();
 
-    // Parse the JSON response
     const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const recipe = JSON.parse(cleanText);
-
-    // Validate recipe structure
-    const requiredFields = ['name', 'time', 'difficulty', 'ingredients', 'steps'];
-    for (const field of requiredFields) {
-      if (!recipe[field]) {
-        throw new Error(`Missing required field: ${field}`);
-      }
-    }
 
     res.json({ recipe });
   } catch (error) {
     console.error('Recipe generation error:', error.message);
 
-    if (error.message?.includes('API_KEY')) {
-      return res.status(401).json({
-        error: 'Invalid API key. Please check your GEMINI_API_KEY.',
+    // Specific error handling for Gemini API
+    if (error.message?.includes('429') || error.message?.includes('finishReason: RECITATION') || error.message?.includes('RetryInfo')) {
+      return res.status(429).json({
+        error: 'AI is a bit busy! Please wait 20-30 seconds for your new API key to fully activate and try again.',
       });
     }
 
-    if (error instanceof SyntaxError) {
-      return res.status(500).json({
-        error: 'Failed to parse recipe. Please try again.',
+    if (error.message?.includes('API_KEY')) {
+      return res.status(401).json({
+        error: 'Invalid API key. Please double check your GEMINI_API_KEY in the .env file.',
       });
     }
 
     res.status(500).json({
-      error: 'Something went wrong generating your recipe. Please try again!',
+      error: 'Something went wrong generating your recipe. Please try again in a few moments!',
     });
   }
 });
